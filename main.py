@@ -176,3 +176,23 @@ if __name__ == "__main__":
             print(f"Restarting due to error: {e}")
             import time
             time.sleep(10)
+# Yeh line sabse end me add karo
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "I'm alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+# Yeh function background me Flask chalayega
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# Bot start hone se pehle yeh run karo
+keep_alive()
