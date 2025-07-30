@@ -175,4 +175,4 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Restarting due to error: {e}")
             import time
-            time.sleep(10
+            time.sleep(10)
