@@ -6,6 +6,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 import json, os, re
 import asyncio
 import logging
+from flask import Flask
+from threading import Thread
 
 BOT_TOKEN = "8372436876:AAFFmGzNq5UegFdJN18YNcijiO-Gd75HI68"
 ADMIN_ID = 7000109688
@@ -105,14 +107,12 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ForceReply()
         )
 
-# Admin reply handler (grants access to user)
 async def admin_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.reply_to_message:
         original = update.message.reply_to_message.text
         match = re.search(r"ID: (\d+)", original)
         if match:
             user_id = int(match.group(1))
-
             allowed_users.add(user_id)
             with open("allowed_users.json", "w") as f:
                 json.dump(list(allowed_users), f)
@@ -131,7 +131,6 @@ async def admin_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         else:
             await update.message.reply_text("❌ Could not extract user ID.")
 
-# Block unauthorized users from messaging first
 async def user_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id not in allowed_users:
@@ -148,27 +147,43 @@ async def user_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Bot setup
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(button_click))
-app.add_handler(MessageHandler(filters.REPLY & filters.ALL, admin_reply_handler))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, user_message_handler))
+# Telegram Bot App
+bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CallbackQueryHandler(button_click))
+bot_app.add_handler(MessageHandler(filters.REPLY & filters.ALL, admin_reply_handler))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, user_message_handler))
 
-# Run loop
+# Flask App for UptimeRobot
+web_app = Flask('')
+
+@web_app.route('/')
+def home():
+    return "I'm alive!"
+
+def run():
+    web_app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# Bot main function
 async def main():
     try:
-        await app.initialize()
-        await app.start()
+        await bot_app.initialize()
+        await bot_app.start()
         logger.info("🤖 NMMS Bot started...")
-        await app.updater.start_polling(drop_pending_updates=True)
+        await bot_app.updater.start_polling(drop_pending_updates=True)
         await asyncio.Event().wait()
     except Exception as e:
         logger.error(f"Error: {e}")
         await asyncio.sleep(10)
         await main()
 
+# Start Flask + Bot
 if __name__ == "__main__":
+    keep_alive()
     while True:
         try:
             asyncio.run(main())
@@ -176,23 +191,3 @@ if __name__ == "__main__":
             print(f"Restarting due to error: {e}")
             import time
             time.sleep(10)
-# Yeh line sabse end me add karo
-from flask import Flask
-from threading import Thread
-
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "I'm alive!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-# Yeh function background me Flask chalayega
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-# Bot start hone se pehle yeh run karo
-keep_alive()
