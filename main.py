@@ -9,14 +9,14 @@ import logging
 from threading import Thread
 from flask import Flask
 
-# Import telebot instead for simpler implementation
+# Use pyTelegramBotAPI for Render compatibility
 import telebot
 from telebot import types
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Configuration
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8372436876:AAFFmGzNq5UegFdJN18YNcijiO-Gd75HI68")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "7000109688"))
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "YOUR_ADMIN_ID_HERE"))
 
 # Initialize bot
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -25,8 +25,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 user_demo_status = {"type_1": [], "type_2": []}
 allowed_users = set()
 blocked_users = set()
-pending_location_users = set()
-pending_plan_selection = {}  # Store user's plan selection while asking for state
+pending_plan_selection = {}
 
 # Indian states list
 INDIAN_STATES = [
@@ -36,15 +35,6 @@ INDIAN_STATES = [
     "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
     "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
     "Uttar Pradesh", "Uttarakhand", "West Bengal", "Delhi", "Jammu & Kashmir"
-]
-
-# J&K variations for blocking (case-insensitive matching)
-JK_VARIATIONS = [
-    "jammu", "kashmir", "j&k", "jk", "jammu kashmir", "jammu and kashmir", 
-    "jammu & kashmir", "srinagar", "leh", "ladakh", "kargil", "anantnag",
-    "baramulla", "budgam", "ganderbal", "kupwara", "pulwama", "shopian",
-    "bandipora", "kathua", "doda", "kishtwar", "poonch", "rajouri",
-    "ramban", "reasi", "samba", "udhampur", "mirpur", "muzaffarabad"
 ]
 
 def load_json_file(filename, default_value):
@@ -74,14 +64,6 @@ if not isinstance(user_demo_status, dict) or "type_1" not in user_demo_status:
 
 allowed_users = set(load_json_file("allowed_users.json", []))
 blocked_users = set(load_json_file("blocked_users.json", []))
-
-def is_jk_location(location_text):
-    """Check if the provided location matches J&K variations"""
-    location_lower = location_text.lower().strip()
-    for variation in JK_VARIATIONS:
-        if variation in location_lower or location_lower in variation:
-            return True
-    return False
 
 def show_state_selection(chat_id, message_id, plan_info):
     """Show Indian state selection keyboard"""
@@ -421,7 +403,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Flask App for health check
+# Flask App for health check and Render compatibility
 web_app = Flask(__name__)
 
 @web_app.route('/')
@@ -439,7 +421,8 @@ def health():
 
 def run_flask():
     """Run Flask app in separate thread"""
-    web_app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    web_app.run(host='0.0.0.0', port=port, debug=False)
 
 def keep_alive():
     """Keep Flask server alive"""
