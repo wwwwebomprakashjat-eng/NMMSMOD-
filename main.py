@@ -17,6 +17,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMedia
 # Configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "YOUR_ADMIN_ID_HERE"))
+REQUIRED_CHANNEL = "@getnmmsmod"   # ✅ Required channel username
 
 # Initialize bot
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -82,6 +83,17 @@ def save_last_replied_user(user_id):
 # Load last replied user on startup
 load_last_replied_user()
 
+# ✅ Check if user joined channel
+def is_user_subscribed(user_id):
+    """Check if user is subscribed to the required channel"""
+    try:
+        member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logging.warning(f"Subscription check failed for {user_id}: {e}")
+        return False
+
+
 def show_state_selection(chat_id, message_id, plan_info):
     """Show Indian state selection keyboard"""
     keyboard = InlineKeyboardMarkup()
@@ -103,17 +115,46 @@ def show_state_selection(chat_id, message_id, plan_info):
 
 @bot.message_handler(commands=['start'])
 def start_command(message):
-    """Start command handler - show main menu directly"""
+    """Start command handler - check subscription first"""
     user_id = message.from_user.id
     
-    # Check if user is already blocked
+    # Block check
     if user_id in blocked_users:
-        bot.reply_to(message, 
-            "❌ Access denied. You are not eligible to use this service.")
+        bot.reply_to(message, "❌ Access denied. You are not eligible to use this service.")
         return
     
-    # Show main menu directly
+    # Subscription check
+    if not is_user_subscribed(user_id):
+        keyboard = InlineKeyboardMarkup()
+        keyboard.add(
+            InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{REQUIRED_CHANNEL.strip('@')}"),
+            InlineKeyboardButton("✅ I Joined", callback_data="check_subscription")
+        )
+        bot.send_message(
+            message.chat.id,
+            "⚠️ Please join our channel to continue.\n\n👉 @getnmmsmod",
+            reply_markup=keyboard
+        )
+        return
+    
+    # Already subscribed → show menu
     show_main_menu(message.chat.id)
+
+# ✅ Handle "I Joined" button
+@bot.callback_query_handler(func=lambda call: call.data == "check_subscription")
+def check_subscription_callback(call):
+    """Re-check subscription when user clicks 'I Joined'"""
+    user_id = call.from_user.id
+    
+    if is_user_subscribed(user_id):
+        bot.edit_message_text(
+            "✅ Thank you for joining! Please continue below:",
+            call.message.chat.id,
+            call.message.message_id
+        )
+        show_main_menu(call.message.chat.id)
+    else:
+        bot.answer_callback_query(call.id, "❌ You haven't joined yet!")
 
 def show_main_menu(chat_id):
     """Show the main menu with type selection"""
@@ -127,19 +168,21 @@ Choose one
 🔸 𝐓𝐲𝐩𝐞 𝟏:
    𝐖𝐨𝐫𝐤𝐞𝐫𝐬 𝐜𝐨𝐮𝐧𝐭 𝐫𝐞𝐦𝐨𝐯𝐞
    𝐃𝐞𝐯𝐞𝐥𝐨𝐩𝐞𝐫 𝐨𝐩𝐭𝐢𝐨𝐧𝐬 𝐛𝐲𝐩𝐚𝐬𝐬
-   𝐅𝐚𝐜𝐤 𝐥𝐨𝐜𝐚𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
+   𝐅𝐚𝐤𝐞 𝐥𝐨𝐜𝐚𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
    𝐓𝐢𝐦𝐞 𝐜𝐡𝐚𝐧𝐠𝐞 𝐞𝐧𝐚𝐛𝐥𝐞
    𝐍𝐨 𝐧𝐞𝐞𝐝 𝐝𝐚𝐢𝐥𝐲 𝐨𝐭𝐩
 
 🔹 𝐓𝐲𝐩𝐞 𝟐:
    𝐆𝐚𝐥𝐥𝐞𝐫𝐲 𝐩𝐡𝐨𝐭𝐨 𝐮𝐩𝐥𝐨𝐚𝐝
    𝐃𝐞𝐯𝐞𝐥𝐨𝐩𝐞𝐫 𝐨𝐩𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
-   𝐅𝐚𝐜𝐤 𝐥𝐨𝐜𝐚𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
+   𝐅𝐚𝐤𝐞 𝐥𝐨𝐜𝐚𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
    𝐓𝐢𝐦𝐞 𝐜𝐡𝐚𝐧𝐠𝐞 𝐞𝐧𝐚𝐛𝐥𝐞
    𝐍𝐨 𝐧𝐞𝐞𝐝 𝐝𝐚𝐢𝐥𝐲 𝐨𝐭𝐩"""
     
     bot.send_message(chat_id, message, reply_markup=keyboard)
 
+# ---- REST OF YOUR CODE REMAINS SAME (callback handlers, admin, etc.) ----
+# keep everything else unchanged...
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
     """Handle button clicks for plan selection"""
