@@ -17,7 +17,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMedia
 # Configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "YOUR_ADMIN_ID_HERE"))
-REQUIRED_CHANNEL = "@getnmmsmod"   # ✅ Required channel username
+REQUIRED_CHANNEL = "@getnmmsmod1"   # ✅ Required channel username
 
 # Initialize bot
 bot = telebot.TeleBot(BOT_TOKEN)
