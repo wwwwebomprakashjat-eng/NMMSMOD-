@@ -12,7 +12,7 @@ from flask import Flask
 # Use pyTelegramBotAPI for Render compatibility
 import telebot
 from telebot import types
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 
 # Configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
@@ -286,11 +286,11 @@ def handle_callback_query(call):
         # Remove from pending
         del pending_plan_selection[user_id]
 
-# ✨ ENHANCED ADMIN REPLY HANDLER WITH ORIGINAL MESSAGE FORWARDING
+# ✨ PERFECT ADMIN REPLY HANDLER
 @bot.message_handler(func=lambda message: message.reply_to_message is not None and message.from_user.id == ADMIN_ID, 
                     content_types=['text', 'photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
 def admin_reply_handler(message):
-    """Handle admin replies and show original message to user"""
+    """Perfect reply handler with proper threading"""
     if not message.reply_to_message:
         return
     
@@ -328,45 +328,28 @@ def admin_reply_handler(message):
     save_json_file("allowed_users.json", list(allowed_users))
 
     try:
-        # ✨ First forward the original message back to user (what they're replying to)
+        # ✨ PERFECT THREADING SYSTEM
+        
+        # First, send the original media back to user for context (if exists)
         original_msg = message.reply_to_message
         
-        # Check if this message contains media that user sent
         if original_msg.photo:
-            # Forward the photo back to user to show context
-            bot.send_photo(user_id, original_msg.photo[-1].file_id, 
-                         caption="↩️ You sent this photo:")
+            # Send original photo back for context
+            bot.send_photo(user_id, original_msg.photo[-1].file_id)
         elif original_msg.document:
-            # Forward the document back to user
-            bot.send_document(user_id, original_msg.document.file_id, 
-                            caption="↩️ You sent this document:")
+            bot.send_document(user_id, original_msg.document.file_id)
         elif original_msg.video:
-            # Forward the video back to user
-            bot.send_video(user_id, original_msg.video.file_id, 
-                         caption="↩️ You sent this video:")
+            bot.send_video(user_id, original_msg.video.file_id)
         elif original_msg.audio:
-            # Forward the audio back to user
-            bot.send_audio(user_id, original_msg.audio.file_id, 
-                         caption="↩️ You sent this audio:")
+            bot.send_audio(user_id, original_msg.audio.file_id)
         elif original_msg.voice:
-            # Forward the voice back to user
             bot.send_voice(user_id, original_msg.voice.file_id)
-            bot.send_message(user_id, "↩️ You sent this voice message:")
         elif original_msg.sticker:
-            # Forward the sticker back to user
             bot.send_sticker(user_id, original_msg.sticker.file_id)
-            bot.send_message(user_id, "↩️ You sent this sticker:")
         elif original_msg.video_note:
-            # Forward the video note back to user
             bot.send_video_note(user_id, original_msg.video_note.file_id)
-            bot.send_message(user_id, "↩️ You sent this video note:")
-        else:
-            # If it's a text message, extract the user's original message
-            user_original_text = original.split('\n\n')[-1] if '\n\n' in original else original
-            if user_original_text and not user_original_text.startswith(('📨', '🆔', '📥', '📷', '📎', '🎥', '🎵', '🎤', '😀', '📹')):
-                bot.send_message(user_id, f"↩️ Your message: \"{user_original_text}\"")
         
-        # Now send admin's reply
+        # Now send admin's reply directly below (perfect threading)
         if message.content_type == 'text':
             bot.send_message(user_id, f"📩 Admin: {message.text}")
         elif message.content_type == 'photo':
@@ -397,11 +380,11 @@ def admin_reply_handler(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Failed to send {message.content_type}: {str(e)}")
 
-# ✨ ENHANCED USER MESSAGE HANDLER WITH ACTUAL MEDIA FORWARDING
+# ✨ CLEAN USER MESSAGE HANDLER
 @bot.message_handler(func=lambda message: message.from_user.id != ADMIN_ID, 
                     content_types=['text', 'photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
 def user_message_handler(message):
-    """Handle user messages with enhanced reply context - showing actual media"""
+    """Clean user message handler with proper context"""
     user_id = message.from_user.id
     user = message.from_user
     full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
@@ -423,11 +406,11 @@ def user_message_handler(message):
         # Create reply markup for admin
         reply_markup = types.ForceReply()
         
-        # ✨ Enhanced reply context handling
+        # ✨ Enhanced reply context - show original media when user replies
         if message.reply_to_message:
             original_msg = message.reply_to_message
             
-            # First, forward the original message to admin to show context
+            # Show admin the exact media user replied to
             if original_msg.photo:
                 bot.send_photo(ADMIN_ID, original_msg.photo[-1].file_id,
                              caption=f"↩️ <b>{full_name}</b> replied to this photo:",
@@ -454,7 +437,6 @@ def user_message_handler(message):
                 bot.send_video_note(ADMIN_ID, original_msg.video_note.file_id)
                 bot.send_message(ADMIN_ID, f"↩️ <b>{full_name}</b> replied to this video note:", parse_mode="HTML")
             elif original_msg.text:
-                # For text messages, show the original text
                 original_text = original_msg.text[:100] + "..." if len(original_msg.text) > 100 else original_msg.text
                 bot.send_message(ADMIN_ID, f"↩️ <b>{full_name}</b> replied to: \"{original_text}\"", parse_mode="HTML")
         
@@ -543,11 +525,11 @@ def user_message_handler(message):
         logging.error(f"Failed to forward user message/media: {e}")
         bot.reply_to(message, "❌ Failed to send your message. Please try again.")
 
-# ✨ AUTO-SEND TO LAST REPLIED USER
+# ✨ ENHANCED AUTO-SEND WITH TEXT SUPPORT
 @bot.message_handler(func=lambda message: message.from_user.id == ADMIN_ID and message.reply_to_message is None, 
-                    content_types=['photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
+                    content_types=['text', 'photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
 def admin_direct_media_handler(message):
-    """Handle admin sending media directly - send to last replied user"""
+    """Handle admin sending both media and text directly to last user"""
     global last_replied_user
     
     if not last_replied_user:
@@ -563,8 +545,10 @@ def admin_direct_media_handler(message):
         return
     
     try:
-        # Handle different media types
-        if message.content_type == 'photo':
+        # Handle different content types including TEXT
+        if message.content_type == 'text':
+            bot.send_message(last_replied_user, f"📩 Admin: {message.text}")
+        elif message.content_type == 'photo':
             caption = f"📩 Admin: {message.caption}" if message.caption else "📩 Photo from Admin"
             bot.send_photo(last_replied_user, message.photo[-1].file_id, caption=caption)
         elif message.content_type == 'document':
@@ -593,7 +577,7 @@ def admin_direct_media_handler(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Failed to send {message.content_type} to user {last_replied_user}: {str(e)}")
 
-# ✨ ADMIN COMMANDS
+# ✨ ADMIN COMMANDS (keeping existing functionality)
 @bot.message_handler(commands=['last'])
 def admin_check_last_user(message):
     """Check who was the last replied user"""
@@ -605,7 +589,7 @@ def admin_check_last_user(message):
     if last_replied_user:
         bot.reply_to(message, 
             f"🎯 <b>Last Replied User:</b> <code>{last_replied_user}</code>\n\n"
-            f"Send any media file directly and it will go to this user.",
+            f"Send any message/media directly and it will go to this user.",
             parse_mode="HTML")
     else:
         bot.reply_to(message, 
@@ -640,7 +624,7 @@ def admin_set_target_user(message):
         save_last_replied_user(user_id)
         
         bot.reply_to(message, f"✅ Target user set to: {user_id}\n"
-                             f"Now send any media and it will go to this user.")
+                             f"Now send any message/media and it will go to this user.")
         
     except ValueError:
         bot.reply_to(message, "❌ Invalid user ID")
@@ -666,11 +650,11 @@ def admin_commands(message):
             "👁 <code>/last</code> - Check last replied user\n"
             "🎯 <code>/set user_id</code> - Set target user\n"
             "🧹 <code>/clear</code> - Clear target user\n\n"
-            "📱 <b>Features:</b>\n"
-            "• Original media shown in replies\n"
-            "• User gets ✅ Sent confirmation\n"
-            "• Exact context for all media types\n"
-            "• Auto media forwarding to last user",
+            "📱 <b>Perfect Features:</b>\n"
+            "• Perfect message threading\n"
+            "• Text + Media replies to last user\n"
+            "• Clean UI without extra messages\n"
+            "• User confirmation messages",
             parse_mode="HTML"
         )
         return
@@ -753,11 +737,11 @@ web_app = Flask(__name__)
 def home():
     return {
         "status": "alive",
-        "bot": "NMMS MOD Bot - Perfect Reply System",
+        "bot": "NMMS MOD Bot - Perfect Threading System",
         "blocked_users": len(blocked_users),
         "allowed_users": len(allowed_users),
         "last_replied_user": last_replied_user,
-        "features": ["exact_media_context", "user_confirmation", "original_message_forwarding", "enhanced_reply_system"]
+        "features": ["perfect_threading", "text_and_media_replies", "clean_ui", "user_confirmation"]
     }
 
 @web_app.route('/health')
@@ -777,7 +761,7 @@ def keep_alive():
 def main():
     """Main bot function"""
     try:
-        logger.info("🚀 Starting NMMS Bot - Perfect Reply System...")
+        logger.info("🚀 Starting NMMS Bot - Perfect Threading System...")
         logger.info(f"📊 Loaded {len(blocked_users)} blocked users, {len(allowed_users)} allowed users")
         logger.info(f"🎯 Last replied user: {last_replied_user}")
         
