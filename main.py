@@ -27,6 +27,9 @@ allowed_users = set()
 blocked_users = set()
 pending_plan_selection = {}
 
+# ✨ NEW: Track last replied user
+last_replied_user = None  # Store last user ID admin replied to
+
 # Indian states list
 INDIAN_STATES = [
     "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
@@ -64,6 +67,21 @@ if not isinstance(user_demo_status, dict) or "type_1" not in user_demo_status:
 
 allowed_users = set(load_json_file("allowed_users.json", []))
 blocked_users = set(load_json_file("blocked_users.json", []))
+
+# Load last replied user
+def load_last_replied_user():
+    """Load last replied user from file"""
+    global last_replied_user
+    last_replied_user = load_json_file("last_replied_user.json", None)
+
+def save_last_replied_user(user_id):
+    """Save last replied user to file"""
+    global last_replied_user
+    last_replied_user = user_id
+    save_json_file("last_replied_user.json", user_id)
+
+# Load last replied user on startup
+load_last_replied_user()
 
 def show_state_selection(chat_id, message_id, plan_info):
     """Show Indian state selection keyboard"""
@@ -269,84 +287,153 @@ def handle_callback_query(call):
         # Remove from pending
         del pending_plan_selection[user_id]
 
-@bot.message_handler(func=lambda message: message.reply_to_message is not None and message.from_user.id == ADMIN_ID)
+# ✨ IMPROVED ADMIN REPLY HANDLER WITH LAST USER TRACKING
+@bot.message_handler(func=lambda message: message.reply_to_message is not None and message.from_user.id == ADMIN_ID, 
+                    content_types=['text', 'photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
 def admin_reply_handler(message):
-    """Handle admin replies to user requests with full media support"""
-    if message.reply_to_message:
-        original = message.reply_to_message.text or message.reply_to_message.caption or ""
-        
-        # Method 1: Extract ID from order messages (👤 Name, 🆔 ID: format)
-        match = re.search(r"🆔 (\d+)", original)
-        if not match:
-            # Method 2: Try alternative formats
-            match = re.search(r"ID: (\d+)", original)
-        
+    """Handle admin replies and track last replied user"""
+    if not message.reply_to_message:
+        return
+    
+    # Get the original message text or caption
+    original = message.reply_to_message.text or message.reply_to_message.caption or ""
+    
+    # Extract user ID using multiple methods
+    user_id = None
+    
+    # Method 1: Look for 🆔 pattern
+    match = re.search(r"🆔\s*(\d+)", original)
+    if match:
+        user_id = int(match.group(1))
+    else:
+        # Method 2: Look for ID: pattern
+        match = re.search(r"ID:\s*<code>(\d+)</code>", original)
         if match:
             user_id = int(match.group(1))
         else:
-            bot.reply_to(message, "❌ Could not extract user ID from this message.")
-            return
-        
-        # Don't allow messaging blocked users
-        if user_id in blocked_users:
-            bot.reply_to(message, "❌ Cannot send message to blocked user.")
-            return
-        
-        # Add user to allowed list
-        allowed_users.add(user_id)
-        save_json_file("allowed_users.json", list(allowed_users))
+            # Method 3: Look for simple ID: pattern
+            match = re.search(r"ID:\s*(\d+)", original)
+            if match:
+                user_id = int(match.group(1))
+    
+    if not user_id:
+        bot.reply_to(message, "❌ Could not extract user ID from this message.")
+        return
+    
+    # Check if user is blocked
+    if user_id in blocked_users:
+        bot.reply_to(message, "❌ Cannot send message to blocked user.")
+        return
+    
+    # ✨ SAVE LAST REPLIED USER
+    save_last_replied_user(user_id)
+    
+    # Add user to allowed list
+    allowed_users.add(user_id)
+    save_json_file("allowed_users.json", list(allowed_users))
 
-        try:
-            # Handle text message
-            if message.text:
-                bot.send_message(user_id, f"📩 Admin: {message.text}")
-            
-            # Handle different media types
-            if message.photo:
-                if message.caption:
-                    bot.send_photo(user_id, message.photo[-1].file_id, 
-                                 caption=f"📩 Admin: {message.caption}")
-                else:
-                    bot.send_photo(user_id, message.photo[-1].file_id, 
-                                 caption="📩 Photo from Admin")
-            
-            elif message.document:
-                if message.caption:
-                    bot.send_document(user_id, message.document.file_id, 
-                                    caption=f"📩 Admin: {message.caption}")
-                else:
-                    bot.send_document(user_id, message.document.file_id, 
-                                    caption="📩 File from Admin")
-            
-            elif message.video:
-                if message.caption:
-                    bot.send_video(user_id, message.video.file_id, 
-                                 caption=f"📩 Admin: {message.caption}")
-                else:
-                    bot.send_video(user_id, message.video.file_id, 
-                                 caption="📩 Video from Admin")
-            
-            elif message.audio:
-                bot.send_audio(user_id, message.audio.file_id)
-                if message.caption:
-                    bot.send_message(user_id, f"📩 Admin: {message.caption}")
-            
-            elif message.voice:
-                bot.send_voice(user_id, message.voice.file_id)
-                bot.send_message(user_id, "📩 Voice message from Admin")
-            
-            elif message.sticker:
-                bot.send_sticker(user_id, message.sticker.file_id)
-                bot.send_message(user_id, "📩 Sticker from Admin")
-            
-            elif message.video_note:
-                bot.send_video_note(user_id, message.video_note.file_id)
-                bot.send_message(user_id, "📩 Video note from Admin")
-            
-            bot.reply_to(message, f"✅ Message sent successfully to user {user_id}")
-            
-        except Exception as e:
-            bot.reply_to(message, f"❌ Failed to send: {e}")
+    try:
+        # Handle text message
+        if message.content_type == 'text':
+            bot.send_message(user_id, f"📩 Admin: {message.text}")
+        
+        # Handle photo
+        elif message.content_type == 'photo':
+            caption = f"📩 Admin: {message.caption}" if message.caption else "📩 Photo from Admin"
+            bot.send_photo(user_id, message.photo[-1].file_id, caption=caption)
+        
+        # Handle document
+        elif message.content_type == 'document':
+            caption = f"📩 Admin: {message.caption}" if message.caption else "📩 Document from Admin"
+            bot.send_document(user_id, message.document.file_id, caption=caption)
+        
+        # Handle video
+        elif message.content_type == 'video':
+            caption = f"📩 Admin: {message.caption}" if message.caption else "📩 Video from Admin"
+            bot.send_video(user_id, message.video.file_id, caption=caption)
+        
+        # Handle audio
+        elif message.content_type == 'audio':
+            bot.send_audio(user_id, message.audio.file_id)
+            if message.caption:
+                bot.send_message(user_id, f"📩 Admin: {message.caption}")
+        
+        # Handle voice
+        elif message.content_type == 'voice':
+            bot.send_voice(user_id, message.voice.file_id)
+            bot.send_message(user_id, "📩 Voice message from Admin")
+        
+        # Handle sticker
+        elif message.content_type == 'sticker':
+            bot.send_sticker(user_id, message.sticker.file_id)
+            bot.send_message(user_id, "📩 Sticker from Admin")
+        
+        # Handle video note
+        elif message.content_type == 'video_note':
+            bot.send_video_note(user_id, message.video_note.file_id)
+            bot.send_message(user_id, "📩 Video note from Admin")
+        
+        bot.reply_to(message, f"✅ {message.content_type.title()} sent successfully to user {user_id}\n🎯 This user is now set as last replied")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Failed to send {message.content_type}: {str(e)}")
+
+# ✨ NEW: AUTO-SEND TO LAST REPLIED USER
+@bot.message_handler(func=lambda message: message.from_user.id == ADMIN_ID and message.reply_to_message is None, 
+                    content_types=['photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
+def admin_direct_media_handler(message):
+    """Handle admin sending media directly (not as reply) - send to last replied user"""
+    global last_replied_user
+    
+    if not last_replied_user:
+        bot.reply_to(message, 
+            "❌ No last replied user found.\n"
+            "Please reply to a user's message first to set target user.")
+        return
+    
+    if last_replied_user in blocked_users:
+        bot.reply_to(message, 
+            f"❌ Last replied user ({last_replied_user}) is blocked.\n"
+            "Please reply to another user's message first.")
+        return
+    
+    try:
+        # Handle different media types
+        if message.content_type == 'photo':
+            caption = f"📩 Admin: {message.caption}" if message.caption else "📩 Photo from Admin"
+            bot.send_photo(last_replied_user, message.photo[-1].file_id, caption=caption)
+        
+        elif message.content_type == 'document':
+            caption = f"📩 Admin: {message.caption}" if message.caption else "📩 Document from Admin"
+            bot.send_document(last_replied_user, message.document.file_id, caption=caption)
+        
+        elif message.content_type == 'video':
+            caption = f"📩 Admin: {message.caption}" if message.caption else "📩 Video from Admin"
+            bot.send_video(last_replied_user, message.video.file_id, caption=caption)
+        
+        elif message.content_type == 'audio':
+            bot.send_audio(last_replied_user, message.audio.file_id)
+            if message.caption:
+                bot.send_message(last_replied_user, f"📩 Admin: {message.caption}")
+        
+        elif message.content_type == 'voice':
+            bot.send_voice(last_replied_user, message.voice.file_id)
+            bot.send_message(last_replied_user, "📩 Voice message from Admin")
+        
+        elif message.content_type == 'sticker':
+            bot.send_sticker(last_replied_user, message.sticker.file_id)
+            bot.send_message(last_replied_user, "📩 Sticker from Admin")
+        
+        elif message.content_type == 'video_note':
+            bot.send_video_note(last_replied_user, message.video_note.file_id)
+            bot.send_message(last_replied_user, "📩 Video note from Admin")
+        
+        bot.reply_to(message, 
+            f"✅ {message.content_type.title()} sent to last replied user: {last_replied_user}\n"
+            f"🎯 Target user remains: {last_replied_user}")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Failed to send {message.content_type} to user {last_replied_user}: {str(e)}")
 
 @bot.message_handler(func=lambda message: message.from_user.id != ADMIN_ID, 
                     content_types=['text', 'photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
@@ -374,7 +461,7 @@ def user_message_handler(message):
         reply_markup = types.ForceReply()
         
         # Forward text message
-        if message.text:
+        if message.content_type == 'text':
             bot.send_message(ADMIN_ID,
                 f"📨 Message from <b>{full_name}</b> ({username})\n"
                 f"🆔 {user_id}\n\n{message.text}",
@@ -382,8 +469,8 @@ def user_message_handler(message):
                 reply_markup=reply_markup
             )
         
-        # Forward media with details
-        elif message.photo:
+        # Forward media with details (same as before...)
+        elif message.content_type == 'photo':
             bot.send_photo(ADMIN_ID, message.photo[-1].file_id,
                          caption=f"📷 Photo from <b>{full_name}</b> ({username})\n"
                                 f"🆔 {user_id}\n\n"
@@ -391,7 +478,7 @@ def user_message_handler(message):
                          parse_mode="HTML",
                          reply_markup=reply_markup)
         
-        elif message.document:
+        elif message.content_type == 'document':
             file_info = ""
             if message.document.file_name:
                 file_info += f"📄 File: {message.document.file_name}\n"
@@ -407,7 +494,7 @@ def user_message_handler(message):
                             parse_mode="HTML",
                             reply_markup=reply_markup)
         
-        elif message.video:
+        elif message.content_type == 'video':
             bot.send_video(ADMIN_ID, message.video.file_id,
                          caption=f"🎥 Video from <b>{full_name}</b> ({username})\n"
                                 f"🆔 {user_id}\n\n"
@@ -415,7 +502,7 @@ def user_message_handler(message):
                          parse_mode="HTML",
                          reply_markup=reply_markup)
         
-        elif message.audio:
+        elif message.content_type == 'audio':
             bot.send_audio(ADMIN_ID, message.audio.file_id,
                          caption=f"🎵 Audio from <b>{full_name}</b> ({username})\n"
                                 f"🆔 {user_id}\n\n"
@@ -423,7 +510,7 @@ def user_message_handler(message):
                          parse_mode="HTML",
                          reply_markup=reply_markup)
         
-        elif message.voice:
+        elif message.content_type == 'voice':
             bot.send_voice(ADMIN_ID, message.voice.file_id,
                          reply_markup=reply_markup)
             bot.send_message(ADMIN_ID,
@@ -431,7 +518,7 @@ def user_message_handler(message):
                 f"🆔 {user_id}",
                 parse_mode="HTML")
         
-        elif message.sticker:
+        elif message.content_type == 'sticker':
             bot.send_sticker(ADMIN_ID, message.sticker.file_id,
                            reply_markup=reply_markup)
             bot.send_message(ADMIN_ID,
@@ -439,7 +526,7 @@ def user_message_handler(message):
                 f"🆔 {user_id}",
                 parse_mode="HTML")
         
-        elif message.video_note:
+        elif message.content_type == 'video_note':
             bot.send_video_note(ADMIN_ID, message.video_note.file_id,
                               reply_markup=reply_markup)
             bot.send_message(ADMIN_ID,
@@ -454,286 +541,57 @@ def user_message_handler(message):
         logging.error(f"Failed to forward user message/media: {e}")
         bot.reply_to(message, "❌ Failed to send your message. Please try again.")
 
-# ADMIN MEDIA SENDING COMMANDS
-
-@bot.message_handler(commands=['photo'])
-def admin_send_photo(message):
-    """Admin command: /photo user_id file_path caption"""
+# ✨ NEW ADMIN COMMANDS FOR LAST USER MANAGEMENT
+@bot.message_handler(commands=['last'])
+def admin_check_last_user(message):
+    """Check who was the last replied user"""
     if message.from_user.id != ADMIN_ID:
         return
     
-    try:
-        parts = message.text.split(' ', 3)
-        if len(parts) < 3:
-            bot.reply_to(message, 
-                "📷 <b>Send Photo Usage:</b>\n\n"
-                "📤 <code>/photo user_id file_path [caption]</code>\n"
-                "📤 <code>/photo user_id URL [caption]</code>\n\n"
-                "Examples:\n"
-                "• <code>/photo 123456789 /path/to/image.jpg Your caption</code>\n"
-                "• <code>/photo 123456789 https://example.com/image.jpg</code>",
-                parse_mode="HTML")
-            return
-        
-        user_id = int(parts[1])
-        file_path = parts[2]
-        caption = parts[3] if len(parts) > 3 else "📩 Photo from Admin"
-        
-        if user_id in blocked_users:
-            bot.reply_to(message, "❌ Cannot send to blocked user.")
-            return
-        
-        # Check if it's URL or local file
-        if file_path.startswith(('http://', 'https://')):
-            # Send photo from URL
-            bot.send_photo(user_id, file_path, caption=caption)
-        else:
-            # Send photo from local file
-            with open(file_path, 'rb') as photo:
-                bot.send_photo(user_id, photo, caption=caption)
-        
-        bot.reply_to(message, f"✅ Photo sent to user {user_id}")
-        allowed_users.add(user_id)
-        save_json_file("allowed_users.json", list(allowed_users))
-        
-    except FileNotFoundError:
-        bot.reply_to(message, "❌ File not found. Check the file path.")
-    except ValueError:
-        bot.reply_to(message, "❌ Invalid user ID.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {e}")
-
-@bot.message_handler(commands=['doc'])
-def admin_send_document(message):
-    """Admin command: /doc user_id file_path caption"""
-    if message.from_user.id != ADMIN_ID:
-        return
+    global last_replied_user
     
-    try:
-        parts = message.text.split(' ', 3)
-        if len(parts) < 3:
-            bot.reply_to(message, 
-                "📎 <b>Send Document Usage:</b>\n\n"
-                "📤 <code>/doc user_id file_path [caption]</code>\n"
-                "📤 <code>/doc user_id URL [caption]</code>\n\n"
-                "Examples:\n"
-                "• <code>/doc 123456789 /path/to/file.pdf Document from Admin</code>\n"
-                "• <code>/doc 123456789 https://example.com/file.zip</code>",
-                parse_mode="HTML")
-            return
-        
-        user_id = int(parts[1])
-        file_path = parts[2]
-        caption = parts[3] if len(parts) > 3 else "📩 Document from Admin"
-        
-        if user_id in blocked_users:
-            bot.reply_to(message, "❌ Cannot send to blocked user.")
-            return
-        
-        # Check if it's URL or local file
-        if file_path.startswith(('http://', 'https://')):
-            # Send document from URL
-            bot.send_document(user_id, file_path, caption=caption)
-        else:
-            # Send document from local file
-            with open(file_path, 'rb') as doc:
-                bot.send_document(user_id, doc, caption=caption)
-        
-        bot.reply_to(message, f"✅ Document sent to user {user_id}")
-        allowed_users.add(user_id)
-        save_json_file("allowed_users.json", list(allowed_users))
-        
-    except FileNotFoundError:
-        bot.reply_to(message, "❌ File not found. Check the file path.")
-    except ValueError:
-        bot.reply_to(message, "❌ Invalid user ID.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {e}")
-
-@bot.message_handler(commands=['video'])
-def admin_send_video(message):
-    """Admin command: /video user_id file_path caption"""
-    if message.from_user.id != ADMIN_ID:
-        return
-    
-    try:
-        parts = message.text.split(' ', 3)
-        if len(parts) < 3:
-            bot.reply_to(message, 
-                "🎥 <b>Send Video Usage:</b>\n\n"
-                "📤 <code>/video user_id file_path [caption]</code>\n"
-                "📤 <code>/video user_id URL [caption]</code>\n\n"
-                "Examples:\n"
-                "• <code>/video 123456789 /path/to/video.mp4 Video from Admin</code>\n"
-                "• <code>/video 123456789 https://example.com/video.mp4</code>",
-                parse_mode="HTML")
-            return
-        
-        user_id = int(parts[1])
-        file_path = parts[2]
-        caption = parts[3] if len(parts) > 3 else "📩 Video from Admin"
-        
-        if user_id in blocked_users:
-            bot.reply_to(message, "❌ Cannot send to blocked user.")
-            return
-        
-        # Check if it's URL or local file
-        if file_path.startswith(('http://', 'https://')):
-            # Send video from URL
-            bot.send_video(user_id, file_path, caption=caption)
-        else:
-            # Send video from local file
-            with open(file_path, 'rb') as video:
-                bot.send_video(user_id, video, caption=caption)
-        
-        bot.reply_to(message, f"✅ Video sent to user {user_id}")
-        allowed_users.add(user_id)
-        save_json_file("allowed_users.json", list(allowed_users))
-        
-    except FileNotFoundError:
-        bot.reply_to(message, "❌ File not found. Check the file path.")
-    except ValueError:
-        bot.reply_to(message, "❌ Invalid user ID.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {e}")
-
-@bot.message_handler(commands=['audio'])
-def admin_send_audio(message):
-    """Admin command: /audio user_id file_path caption"""
-    if message.from_user.id != ADMIN_ID:
-        return
-    
-    try:
-        parts = message.text.split(' ', 3)
-        if len(parts) < 3:
-            bot.reply_to(message, 
-                "🎵 <b>Send Audio Usage:</b>\n\n"
-                "📤 <code>/audio user_id file_path [caption]</code>\n"
-                "📤 <code>/audio user_id URL [caption]</code>\n\n"
-                "Examples:\n"
-                "• <code>/audio 123456789 /path/to/audio.mp3 Audio from Admin</code>\n"
-                "• <code>/audio 123456789 https://example.com/audio.mp3</code>",
-                parse_mode="HTML")
-            return
-        
-        user_id = int(parts[1])
-        file_path = parts[2]
-        caption = parts[3] if len(parts) > 3 else "📩 Audio from Admin"
-        
-        if user_id in blocked_users:
-            bot.reply_to(message, "❌ Cannot send to blocked user.")
-            return
-        
-        # Check if it's URL or local file
-        if file_path.startswith(('http://', 'https://')):
-            # Send audio from URL
-            bot.send_audio(user_id, file_path, caption=caption)
-        else:
-            # Send audio from local file
-            with open(file_path, 'rb') as audio:
-                bot.send_audio(user_id, audio, caption=caption)
-        
-        bot.reply_to(message, f"✅ Audio sent to user {user_id}")
-        allowed_users.add(user_id)
-        save_json_file("allowed_users.json", list(allowed_users))
-        
-    except FileNotFoundError:
-        bot.reply_to(message, "❌ File not found. Check the file path.")
-    except ValueError:
-        bot.reply_to(message, "❌ Invalid user ID.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {e}")
-
-@bot.message_handler(commands=['reply'])
-def admin_quick_reply(message):
-    """Quick reply command for admin: /reply user_id message"""
-    if message.from_user.id != ADMIN_ID:
-        return
-    
-    try:
-        # Extract user_id and message from command
-        parts = message.text.split(' ', 2)
-        if len(parts) < 3:
-            bot.reply_to(message, 
-                "📝 Usage: /reply <user_id> <message>\n"
-                "Example: /reply 123456789 Hello user!")
-            return
-        
-        user_id = int(parts[1])
-        reply_text = parts[2]
-        
-        if user_id in blocked_users:
-            bot.reply_to(message, "❌ Cannot reply to blocked user.")
-            return
-        
-        # Send message to user
-        bot.send_message(user_id, f"📩 Admin: {reply_text}")
-        bot.reply_to(message, f"✅ Reply sent to user {user_id}")
-        
-        # Add to allowed users
-        allowed_users.add(user_id)
-        save_json_file("allowed_users.json", list(allowed_users))
-        
-    except ValueError:
-        bot.reply_to(message, "❌ Invalid user ID format.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Failed to send reply: {e}")
-
-@bot.message_handler(commands=['send'])
-def admin_send_media(message):
-    """Admin command to send media to specific user"""
-    if message.from_user.id != ADMIN_ID:
-        return
-    
-    command_parts = message.text.split(' ', 2)
-    if len(command_parts) < 2:
+    if last_replied_user:
         bot.reply_to(message, 
-            "📝 <b>Admin Send Commands:</b>\n\n"
-            "📤 <code>/send user_id message</code> - Send text\n"
-            "📊 <code>/send broadcast message</code> - Send to all users\n\n"
-            "<b>Media Commands:</b>\n"
-            "📷 <code>/photo user_id file_path [caption]</code>\n"
-            "📎 <code>/doc user_id file_path [caption]</code>\n"
-            "🎥 <code>/video user_id file_path [caption]</code>\n"
-            "🎵 <code>/audio user_id file_path [caption]</code>\n\n"
-            "Example: <code>/send 123456789 Hello user!</code>",
+            f"🎯 <b>Last Replied User:</b> <code>{last_replied_user}</code>\n\n"
+            f"Send any media file directly and it will go to this user.",
             parse_mode="HTML")
+    else:
+        bot.reply_to(message, 
+            "❌ No last replied user set.\n"
+            "Reply to any user's message to set target user.")
+
+@bot.message_handler(commands=['clear'])
+def admin_clear_last_user(message):
+    """Clear last replied user"""
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    global last_replied_user
+    last_replied_user = None
+    save_json_file("last_replied_user.json", None)
+    
+    bot.reply_to(message, "✅ Last replied user cleared.")
+
+@bot.message_handler(commands=['set'])
+def admin_set_target_user(message):
+    """Manually set target user: /set user_id"""
+    if message.from_user.id != ADMIN_ID:
         return
     
     try:
-        # Handle broadcast
-        if command_parts[1].lower() == "broadcast" and len(command_parts) >= 3:
-            broadcast_message = command_parts[2]
-            success_count = 0
-            
-            for user_id in allowed_users:
-                if user_id not in blocked_users:
-                    try:
-                        bot.send_message(user_id, f"📢 Broadcast: {broadcast_message}")
-                        success_count += 1
-                    except:
-                        pass
-            
-            bot.reply_to(message, f"✅ Broadcast sent to {success_count} users.")
+        parts = message.text.split(' ', 1)
+        if len(parts) < 2:
+            bot.reply_to(message, "Usage: /set user_id")
             return
         
-        target_user_id = int(command_parts[1])
+        user_id = int(parts[1])
+        save_last_replied_user(user_id)
         
-        if target_user_id in blocked_users:
-            bot.reply_to(message, "❌ Cannot send to blocked user.")
-            return
+        bot.reply_to(message, f"✅ Target user set to: {user_id}\n"
+                             f"Now send any media and it will go to this user.")
         
-        if len(command_parts) >= 3:
-            text_message = command_parts[2]
-            bot.send_message(target_user_id, f"📩 Admin: {text_message}")
-            bot.reply_to(message, f"✅ Message sent to user {target_user_id}")
-        else:
-            bot.reply_to(message, "❌ Please provide a message to send.")
-            
     except ValueError:
-        bot.reply_to(message, "❌ Invalid user ID.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Failed to send: {e}")
+        bot.reply_to(message, "❌ Invalid user ID")
 
 @bot.message_handler(commands=['admin'])
 def admin_commands(message):
@@ -752,15 +610,14 @@ def admin_commands(message):
             "📋 <code>/admin blocked</code> - List blocked users\n"
             "👥 <code>/admin users</code> - List allowed users\n"
             "🧹 <code>/admin clear</code> - Clear demo status\n\n"
-            "📝 <b>Quick Commands:</b>\n"
-            "💬 <code>/reply user_id message</code> - Quick reply\n"
-            "📤 <code>/send user_id message</code> - Send message\n"
-            "📢 <code>/send broadcast message</code> - Broadcast\n\n"
-            "📱 <b>Media Commands:</b>\n"
-            "📷 <code>/photo user_id file_path</code> - Send photo\n"
-            "📎 <code>/doc user_id file_path</code> - Send document\n"
-            "🎥 <code>/video user_id file_path</code> - Send video\n"
-            "🎵 <code>/audio user_id file_path</code> - Send audio",
+            "🎯 <b>Last User Commands:</b>\n"
+            "👁 <code>/last</code> - Check last replied user\n"
+            "🎯 <code>/set user_id</code> - Set target user\n"
+            "🧹 <code>/clear</code> - Clear target user\n\n"
+            "📱 <b>How to use:</b>\n"
+            "1. Reply to any user message (sets target)\n"
+            "2. Send media directly → goes to last user\n"
+            "3. Use /set user_id for manual target",
             parse_mode="HTML"
         )
         return
@@ -779,7 +636,8 @@ def admin_commands(message):
             f"✅ Allowed Users: {total_allowed}\n"
             f"🔸 Type 1 Demos: {type1_demos}\n"
             f"🔹 Type 2 Demos: {type2_demos}\n"
-            f"⏳ Pending State Selection: {len(pending_plan_selection)}"
+            f"⏳ Pending State Selection: {len(pending_plan_selection)}\n"
+            f"🎯 Last Replied User: {last_replied_user or 'None'}"
         )
         bot.reply_to(message, stats_text, parse_mode="HTML")
     
@@ -842,11 +700,11 @@ web_app = Flask(__name__)
 def home():
     return {
         "status": "alive",
-        "bot": "NMMS MOD Bot",
+        "bot": "NMMS MOD Bot - Last User System",
         "blocked_users": len(blocked_users),
         "allowed_users": len(allowed_users),
-        "media_support": "enabled",
-        "features": ["admin_reply", "media_files", "broadcast", "quick_commands", "media_commands"]
+        "last_replied_user": last_replied_user,
+        "features": ["last_user_tracking", "auto_media_send", "smart_reply_system"]
     }
 
 @web_app.route('/health')
@@ -866,8 +724,9 @@ def keep_alive():
 def main():
     """Main bot function"""
     try:
-        logger.info("🚀 Starting NMMS Bot with complete media support...")
+        logger.info("🚀 Starting NMMS Bot with Last User Tracking System...")
         logger.info(f"📊 Loaded {len(blocked_users)} blocked users, {len(allowed_users)} allowed users")
+        logger.info(f"🎯 Last replied user: {last_replied_user}")
         
         # Start Flask health check server
         keep_alive()
