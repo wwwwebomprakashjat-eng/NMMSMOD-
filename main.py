@@ -156,7 +156,7 @@ def handle_callback_query(call):
         return
 
     if data in ["type_1", "type_2"]:
-        price_text = "Half Month: ₹1000\nFull Month: ₹2000\nDemo: Free" if data == "type_1" else "Half Month: ₹1500\nFull Month: ₹2500\nDemo: Free"
+        price_text = "▪️Half Month: ₹1000\n▪️Full Month: ₹2000\nDemo: Free" if data == "type_1" else "🔹Half Month: ₹1500\n🔹Full Month: ₹2500\nDemo: Free"
         
         keyboard = InlineKeyboardMarkup()
         keyboard.add(InlineKeyboardButton("Half Month", callback_data=f"half_{data}"))
