@@ -136,7 +136,8 @@ Choose one
    𝐃𝐞𝐯𝐞𝐥𝐨𝐩𝐞𝐫 𝐨𝐩𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
    𝐅𝐚𝐜𝐤 𝐥𝐨𝐜𝐚𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
    𝐓𝐢𝐦𝐞 𝐜𝐡𝐚𝐧𝐠𝐞 𝐞𝐧𝐚𝐛𝐥𝐞
-   𝐍𝐨 𝐧𝐞𝐞𝐝 𝐝𝐚𝐢𝐥𝐲 𝐨𝐭𝐩
+   𝐍𝐨 𝐧𝐞𝐞𝐝 𝐝𝐚𝐢𝐥𝐲 𝐨𝐭𝐩"""
+    
     bot.send_message(chat_id, message, reply_markup=keyboard)
 
 @bot.callback_query_handler(func=lambda call: True)
