@@ -132,7 +132,7 @@ Choose one
 
 🔹 𝐓𝐲𝐩𝐞 𝟐:
    𝐆𝐚𝐥𝐥𝐞𝐫𝐲 𝐩𝐡𝐨𝐭𝐨 𝐮𝐩𝐥𝐨𝐚𝐝
-   𝐃𝐞𝐯𝐞𝐥𝐨𝐩𝐞𝐫 𝐨𝐩𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐫𝐬
+   𝐃𝐞𝐯𝐞𝐥𝐨𝐩𝐞𝐫 𝐨𝐩𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
    𝐅𝐚𝐜𝐤 𝐥𝐨𝐜𝐚𝐭𝐢𝐨𝐧 𝐛𝐲𝐩𝐚𝐬𝐬
    𝐓𝐢𝐦𝐞 𝐜𝐡𝐚𝐧𝐠𝐞"""
     
@@ -286,11 +286,11 @@ def handle_callback_query(call):
         # Remove from pending
         del pending_plan_selection[user_id]
 
-# ✨ FIXED ADMIN REPLY HANDLER
+# ✨ ENHANCED ADMIN REPLY HANDLER WITH ORIGINAL MESSAGE FORWARDING
 @bot.message_handler(func=lambda message: message.reply_to_message is not None and message.from_user.id == ADMIN_ID, 
                     content_types=['text', 'photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
 def admin_reply_handler(message):
-    """Handle admin replies and track last replied user"""
+    """Handle admin replies and show original message to user"""
     if not message.reply_to_message:
         return
     
@@ -328,7 +328,45 @@ def admin_reply_handler(message):
     save_json_file("allowed_users.json", list(allowed_users))
 
     try:
-        # Handle different content types
+        # ✨ First forward the original message back to user (what they're replying to)
+        original_msg = message.reply_to_message
+        
+        # Check if this message contains media that user sent
+        if original_msg.photo:
+            # Forward the photo back to user to show context
+            bot.send_photo(user_id, original_msg.photo[-1].file_id, 
+                         caption="↩️ You sent this photo:")
+        elif original_msg.document:
+            # Forward the document back to user
+            bot.send_document(user_id, original_msg.document.file_id, 
+                            caption="↩️ You sent this document:")
+        elif original_msg.video:
+            # Forward the video back to user
+            bot.send_video(user_id, original_msg.video.file_id, 
+                         caption="↩️ You sent this video:")
+        elif original_msg.audio:
+            # Forward the audio back to user
+            bot.send_audio(user_id, original_msg.audio.file_id, 
+                         caption="↩️ You sent this audio:")
+        elif original_msg.voice:
+            # Forward the voice back to user
+            bot.send_voice(user_id, original_msg.voice.file_id)
+            bot.send_message(user_id, "↩️ You sent this voice message:")
+        elif original_msg.sticker:
+            # Forward the sticker back to user
+            bot.send_sticker(user_id, original_msg.sticker.file_id)
+            bot.send_message(user_id, "↩️ You sent this sticker:")
+        elif original_msg.video_note:
+            # Forward the video note back to user
+            bot.send_video_note(user_id, original_msg.video_note.file_id)
+            bot.send_message(user_id, "↩️ You sent this video note:")
+        else:
+            # If it's a text message, extract the user's original message
+            user_original_text = original.split('\n\n')[-1] if '\n\n' in original else original
+            if user_original_text and not user_original_text.startswith(('📨', '🆔', '📥', '📷', '📎', '🎥', '🎵', '🎤', '😀', '📹')):
+                bot.send_message(user_id, f"↩️ Your message: \"{user_original_text}\"")
+        
+        # Now send admin's reply
         if message.content_type == 'text':
             bot.send_message(user_id, f"📩 Admin: {message.text}")
         elif message.content_type == 'photo':
@@ -359,11 +397,11 @@ def admin_reply_handler(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Failed to send {message.content_type}: {str(e)}")
 
-# ✨ FIXED USER MESSAGE HANDLER WITH REPLY CONTEXT
+# ✨ ENHANCED USER MESSAGE HANDLER WITH ACTUAL MEDIA FORWARDING
 @bot.message_handler(func=lambda message: message.from_user.id != ADMIN_ID, 
                     content_types=['text', 'photo', 'document', 'video', 'audio', 'voice', 'sticker', 'video_note'])
 def user_message_handler(message):
-    """Handle user messages with reply context - NO CONFIRMATION MESSAGE"""
+    """Handle user messages with enhanced reply context - showing actual media"""
     user_id = message.from_user.id
     user = message.from_user
     full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
@@ -385,56 +423,62 @@ def user_message_handler(message):
         # Create reply markup for admin
         reply_markup = types.ForceReply()
         
-        # ✨ Check if user is replying to admin's message
-        reply_context = ""
+        # ✨ Enhanced reply context handling
         if message.reply_to_message:
-            # Get the original message that user replied to
             original_msg = message.reply_to_message
             
-            if original_msg.text:
-                # If it's a text message
-                original_text = original_msg.text[:100] + "..." if len(original_msg.text) > 100 else original_msg.text
-                reply_context = f"\n\n📥 <b>Replying to:</b> \"{original_text}\""
-            elif original_msg.photo:
-                # If it's a photo
-                original_caption = original_msg.caption if original_msg.caption else "No caption"
-                original_caption = original_caption[:50] + "..." if len(original_caption) > 50 else original_caption
-                reply_context = f"\n\n📥 <b>Replying to photo:</b> \"{original_caption}\""
+            # First, forward the original message to admin to show context
+            if original_msg.photo:
+                bot.send_photo(ADMIN_ID, original_msg.photo[-1].file_id,
+                             caption=f"↩️ <b>{full_name}</b> replied to this photo:",
+                             parse_mode="HTML")
             elif original_msg.document:
-                # If it's a document
-                file_name = original_msg.document.file_name if original_msg.document.file_name else "Document"
-                original_caption = original_msg.caption if original_msg.caption else "No caption"
-                reply_context = f"\n\n📥 <b>Replying to document:</b> \"{file_name}\" - {original_caption}"
+                bot.send_document(ADMIN_ID, original_msg.document.file_id,
+                                caption=f"↩️ <b>{full_name}</b> replied to this document:",
+                                parse_mode="HTML")
             elif original_msg.video:
-                # If it's a video
-                original_caption = original_msg.caption if original_msg.caption else "No caption"
-                original_caption = original_caption[:50] + "..." if len(original_caption) > 50 else original_caption
-                reply_context = f"\n\n📥 <b>Replying to video:</b> \"{original_caption}\""
+                bot.send_video(ADMIN_ID, original_msg.video.file_id,
+                             caption=f"↩️ <b>{full_name}</b> replied to this video:",
+                             parse_mode="HTML")
+            elif original_msg.audio:
+                bot.send_audio(ADMIN_ID, original_msg.audio.file_id,
+                             caption=f"↩️ <b>{full_name}</b> replied to this audio:",
+                             parse_mode="HTML")
             elif original_msg.voice:
-                reply_context = f"\n\n📥 <b>Replying to:</b> Voice message"
+                bot.send_voice(ADMIN_ID, original_msg.voice.file_id)
+                bot.send_message(ADMIN_ID, f"↩️ <b>{full_name}</b> replied to this voice message:", parse_mode="HTML")
             elif original_msg.sticker:
-                reply_context = f"\n\n📥 <b>Replying to:</b> Sticker"
-            else:
-                reply_context = f"\n\n📥 <b>Replying to:</b> Media message"
+                bot.send_sticker(ADMIN_ID, original_msg.sticker.file_id)
+                bot.send_message(ADMIN_ID, f"↩️ <b>{full_name}</b> replied to this sticker:", parse_mode="HTML")
+            elif original_msg.video_note:
+                bot.send_video_note(ADMIN_ID, original_msg.video_note.file_id)
+                bot.send_message(ADMIN_ID, f"↩️ <b>{full_name}</b> replied to this video note:", parse_mode="HTML")
+            elif original_msg.text:
+                # For text messages, show the original text
+                original_text = original_msg.text[:100] + "..." if len(original_msg.text) > 100 else original_msg.text
+                bot.send_message(ADMIN_ID, f"↩️ <b>{full_name}</b> replied to: \"{original_text}\"", parse_mode="HTML")
         
-        # Forward message based on content type
+        # Now forward user's current message
         if message.content_type == 'text':
+            reply_text = "📥 Reply:" if message.reply_to_message else "📨 Message:"
             bot.send_message(ADMIN_ID,
-                f"📨 Message from <b>{full_name}</b> ({username})\n"
-                f"🆔 {user_id}{reply_context}\n\n{message.text}",
+                f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                f"🆔 {user_id}\n\n{message.text}",
                 parse_mode="HTML",
                 reply_markup=reply_markup
             )
         
         elif message.content_type == 'photo':
+            reply_text = "📥 Photo Reply:" if message.reply_to_message else "📷 Photo:"
             bot.send_photo(ADMIN_ID, message.photo[-1].file_id,
-                         caption=f"📷 Photo from <b>{full_name}</b> ({username})\n"
-                                f"🆔 {user_id}{reply_context}\n\n"
+                         caption=f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                                f"🆔 {user_id}\n\n"
                                 f"{message.caption or 'No caption'}",
                          parse_mode="HTML",
                          reply_markup=reply_markup)
         
         elif message.content_type == 'document':
+            reply_text = "📥 Document Reply:" if message.reply_to_message else "📎 Document:"
             file_info = ""
             if message.document.file_name:
                 file_info += f"📄 File: {message.document.file_name}\n"
@@ -443,56 +487,60 @@ def user_message_handler(message):
                 file_info += f"📊 Size: {file_size_mb} MB\n"
             
             bot.send_document(ADMIN_ID, message.document.file_id,
-                            caption=f"📎 Document from <b>{full_name}</b> ({username})\n"
-                                   f"🆔 {user_id}{reply_context}\n"
+                            caption=f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                                   f"🆔 {user_id}\n"
                                    f"{file_info}"
                                    f"\n{message.caption or 'No caption'}",
                             parse_mode="HTML",
                             reply_markup=reply_markup)
         
         elif message.content_type == 'video':
+            reply_text = "📥 Video Reply:" if message.reply_to_message else "🎥 Video:"
             bot.send_video(ADMIN_ID, message.video.file_id,
-                         caption=f"🎥 Video from <b>{full_name}</b> ({username})\n"
-                                f"🆔 {user_id}{reply_context}\n\n"
+                         caption=f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                                f"🆔 {user_id}\n\n"
                                 f"{message.caption or 'No caption'}",
                          parse_mode="HTML",
                          reply_markup=reply_markup)
         
         elif message.content_type == 'audio':
+            reply_text = "📥 Audio Reply:" if message.reply_to_message else "🎵 Audio:"
             bot.send_audio(ADMIN_ID, message.audio.file_id,
-                         caption=f"🎵 Audio from <b>{full_name}</b> ({username})\n"
-                                f"🆔 {user_id}{reply_context}\n\n"
+                         caption=f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                                f"🆔 {user_id}\n\n"
                                 f"{message.caption or 'No caption'}",
                          parse_mode="HTML",
                          reply_markup=reply_markup)
         
         elif message.content_type == 'voice':
+            reply_text = "📥 Voice Reply:" if message.reply_to_message else "🎤 Voice:"
             bot.send_voice(ADMIN_ID, message.voice.file_id, reply_markup=reply_markup)
             bot.send_message(ADMIN_ID,
-                f"🎤 Voice message from <b>{full_name}</b> ({username})\n"
-                f"🆔 {user_id}{reply_context}",
+                f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                f"🆔 {user_id}",
                 parse_mode="HTML")
         
         elif message.content_type == 'sticker':
+            reply_text = "📥 Sticker Reply:" if message.reply_to_message else "😀 Sticker:"
             bot.send_sticker(ADMIN_ID, message.sticker.file_id, reply_markup=reply_markup)
             bot.send_message(ADMIN_ID,
-                f"😀 Sticker from <b>{full_name}</b> ({username})\n"
-                f"🆔 {user_id}{reply_context}",
+                f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                f"🆔 {user_id}",
                 parse_mode="HTML")
         
         elif message.content_type == 'video_note':
+            reply_text = "📥 Video Note Reply:" if message.reply_to_message else "📹 Video Note:"
             bot.send_video_note(ADMIN_ID, message.video_note.file_id, reply_markup=reply_markup)
             bot.send_message(ADMIN_ID,
-                f"📹 Video note from <b>{full_name}</b> ({username})\n"
-                f"🆔 {user_id}{reply_context}",
+                f"{reply_text} from <b>{full_name}</b> ({username})\n"
+                f"🆔 {user_id}",
                 parse_mode="HTML")
         
-        # ✅ NO CONFIRMATION MESSAGE TO USER - REMOVED THIS LINE
-        # bot.reply_to(message, "✅ Your message/media has been sent to admin.")
+        # ✅ Send confirmation to user
+        bot.reply_to(message, "✅ Sent")
         
     except Exception as e:
         logging.error(f"Failed to forward user message/media: {e}")
-        # Only send error message if there's actually an error
         bot.reply_to(message, "❌ Failed to send your message. Please try again.")
 
 # ✨ AUTO-SEND TO LAST REPLIED USER
@@ -619,8 +667,9 @@ def admin_commands(message):
             "🎯 <code>/set user_id</code> - Set target user\n"
             "🧹 <code>/clear</code> - Clear target user\n\n"
             "📱 <b>Features:</b>\n"
-            "• Users don't get confirmation messages\n"
-            "• Reply context shows original message content\n"
+            "• Original media shown in replies\n"
+            "• User gets ✅ Sent confirmation\n"
+            "• Exact context for all media types\n"
             "• Auto media forwarding to last user",
             parse_mode="HTML"
         )
@@ -704,11 +753,11 @@ web_app = Flask(__name__)
 def home():
     return {
         "status": "alive",
-        "bot": "NMMS MOD Bot - Perfect Version",
+        "bot": "NMMS MOD Bot - Perfect Reply System",
         "blocked_users": len(blocked_users),
         "allowed_users": len(allowed_users),
         "last_replied_user": last_replied_user,
-        "features": ["no_confirmation_messages", "reply_context_tracking", "auto_media_forward", "smart_reply_system"]
+        "features": ["exact_media_context", "user_confirmation", "original_message_forwarding", "enhanced_reply_system"]
     }
 
 @web_app.route('/health')
@@ -728,7 +777,7 @@ def keep_alive():
 def main():
     """Main bot function"""
     try:
-        logger.info("🚀 Starting NMMS Bot - Perfect Version...")
+        logger.info("🚀 Starting NMMS Bot - Perfect Reply System...")
         logger.info(f"📊 Loaded {len(blocked_users)} blocked users, {len(allowed_users)} allowed users")
         logger.info(f"🎯 Last replied user: {last_replied_user}")
         
