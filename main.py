@@ -132,7 +132,7 @@ def start_command(message):
         )
         bot.send_message(
             message.chat.id,
-            "⚠️ Please join our channel to continue.\n\n👉 @getnmmsmod",
+            "⚠️ Please join our channel to continue.\n\n👉 @getnmmsmod1",
             reply_markup=keyboard
         )
         return
@@ -181,8 +181,7 @@ Choose one
     
     bot.send_message(chat_id, message, reply_markup=keyboard)
 
-# ---- REST OF YOUR CODE REMAINS SAME (callback handlers, admin, etc.) ----
-# keep everything else unchanged...
+# ---- REST OF YOUR CODE (plans, callback handlers, admin, etc.) SAME RAHEGA ----
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
     """Handle button clicks for plan selection"""
