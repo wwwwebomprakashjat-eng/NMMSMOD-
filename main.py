@@ -132,7 +132,7 @@ def start_command(message):
         )
         bot.send_message(
             message.chat.id,
-            "⚠️ Please join our channel to continue.\n\n👉 @getnmmsmod1",
+            "⚠️ Please join our channel to continue.\n\n👉 @modnmms",
             reply_markup=keyboard
         )
         return
@@ -252,38 +252,7 @@ def handle_callback_query(call):
         
         plan_info = pending_plan_selection[user_id]
         
-        # Check if selected state is Jammu & Kashmir
-        if selected_state == "Jammu & Kashmir":
-            # Block the user permanently
-            blocked_users.add(user_id)
-            save_json_file("blocked_users.json", list(blocked_users))
-            
-            bot.edit_message_text(
-                "❌ <b>Access Denied</b>\n\n"
-                "माफ़ करें, यह सेवा जम्मू और कश्मीर में उपलब्ध नहीं है।\n"
-                "आपकी समझ के लिए धन्यवाद।",
-                call.message.chat.id, call.message.message_id,
-                parse_mode="HTML"
-            )
-            
-            # Notify admin about blocked user
-            try:
-                bot.send_message(ADMIN_ID,
-                    f"🚫 <b>User Blocked (J&K State Selection)</b>\n\n"
-                    f"👤 Name: {full_name}\n"
-                    f"🆔 ID: <code>{user_id}</code>\n"
-                    f"📍 Selected State: {selected_state}\n"
-                    f"👤 Username: {username}\n"
-                    f"📋 Was requesting: {plan_info['plan']}",
-                    parse_mode="HTML"
-                )
-            except:
-                pass
-            
-            # Remove from pending
-            del pending_plan_selection[user_id]
-            logging.info(f"Blocked user {user_id} for selecting J&K state")
-            return
+        
         
         # User selected valid state, process their request
         if plan_info["type"] == "demo":
